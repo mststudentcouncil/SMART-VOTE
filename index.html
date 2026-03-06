@@ -30,86 +30,69 @@
 
     <script type="module" src="auth.js"></script>
     <script>
-        // ลงทะเบียน Service Worker (เพิ่ม 3 บรรทัดนี้)
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-    }
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
+
     document.addEventListener("DOMContentLoaded", () => {
-        // เช็คว่าเคยกดปิดไปแล้ว หรือ เปิดใช้งานผ่านแอปอยู่แล้วหรือไม่
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        const isDismissed = localStorage.getItem('pwaDismissed');
-
-        if (isStandalone || isDismissed) return; // ถ้าเงื่อนไขตรง ไม่ต้องแสดงแบนเนอร์
-
-        // สร้าง Banner แจ้งเตือนไว้ด้านล่างจอ
-        const banner = document.createElement('div');
-        banner.className = "fixed bottom-4 left-4 right-4 bg-white rounded-xl shadow-2xl border border-purple-100 p-4 flex items-center justify-between z-50 transition-all duration-500 transform translate-y-24 opacity-0 max-w-md mx-auto";
-        banner.innerHTML = `
-            <div class="flex items-center gap-3">
-                <div class="bg-purple-100 p-2.5 rounded-lg text-purple-700">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                </div>
-                <div>
-                    <h4 class="text-sm font-bold text-gray-800 mb-0.5">ติดตั้งแอป MST e-Voting</h4>
-                    <p class="text-[11px] text-gray-500 leading-tight">เพิ่มลงหน้าจอหลัก โหวตง่าย ไม่ต้องเข้าเว็บใหม่</p>
-                </div>
-            </div>
-            <div class="flex gap-2 items-center">
-                <button id="pwaInstallBtn" class="bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold py-2 px-3.5 rounded-lg shadow-sm transition-colors">ติดตั้ง</button>
-                <button id="pwaCloseBtn" class="text-gray-400 hover:text-gray-600 p-1"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-            </div>
-        `;
-        document.body.appendChild(banner);
-
-        // แสดง Banner แบบนุ่มนวลหลังจากโหลดเว็บเสร็จ 1.5 วินาที
-        setTimeout(() => {
-            banner.classList.remove('translate-y-24', 'opacity-0');
-        }, 1500);
-
-        // จัดการเมื่อเด็กกดปุ่ม กากบาท (ปิด)
-        document.getElementById('pwaCloseBtn').addEventListener('click', () => {
-            banner.classList.add('translate-y-24', 'opacity-0');
-            setTimeout(() => banner.remove(), 500);
-            localStorage.setItem('pwaDismissed', 'true'); // จำไว้ในเครื่องว่าเคยกดปิด จะได้ไม่กวนอีก
-        });
-
-        // จัดการเรื่องการติดตั้ง
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        let deferredPrompt;
+        const isMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+        const isAppleDevice = isIOS || isMac;
+        
+        // ถ้าเปิดผ่านแอปแล้ว ให้หยุดการทำงานโค้ดนี้ (ปล่อยให้เห็นหน้า Login ปกติ)
+        if (isStandalone) return; 
 
-        // ดักจับ Event ของ Android Chrome
+        // สร้างหน้าต่างบังคับเต็มจอ (Overlay)
+        const overlay = document.createElement('div');
+        overlay.className = "fixed inset-0 bg-purple-900/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center";
+        overlay.innerHTML = `
+            <img src="https://i.postimg.cc/yxjxZmRN/Logo_mstsc_(1)_(1).png" class="w-24 h-24 mb-6 drop-shadow-lg rounded-full border-4 border-white/20">
+            <h2 class="text-2xl font-bold text-white mb-2">เข้าใช้งานผ่านแอปพลิเคชัน</h2>
+            <p class="text-purple-200 mb-8 text-sm max-w-xs">เพื่อความเสถียรและรวดเร็ว กรุณาติดตั้งแอป MST e-Voting ลงบนเครื่องของท่านก่อนเข้าสู่ระบบ</p>
+            
+            <button id="forceInstallBtn" class="w-full max-w-xs bg-white text-purple-900 font-bold py-3.5 px-4 rounded-xl shadow-lg hover:scale-105 transition-transform mb-4 flex items-center justify-center gap-2 text-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                ติดตั้งแอปทันที
+            </button>
+            
+            <button id="skipInstallBtn" class="text-purple-300 hover:text-white text-sm underline decoration-purple-400/50 underline-offset-4 py-2">
+                ใช้งานผ่านเว็บเบราว์เซอร์ชั่วคราว
+            </button>
+        `;
+        document.body.appendChild(overlay);
+
+        let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
         });
 
-        // เมื่อกดปุ่ม "ติดตั้ง"
-        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
-            if (isIOS) {
-                // สำหรับ iPhone / iPad (Safari ไม่อนุญาตให้ติดตั้งอัตโนมัติ ต้องสอนวิธีกด)
+        document.getElementById('forceInstallBtn').addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') overlay.remove();
+                deferredPrompt = null;
+            } else if (isAppleDevice) {
                 Swal.fire({
-                    title: 'วิธีติดตั้งบน iPhone (iOS)',
+                    title: 'วิธีติดตั้งบน iOS',
                     html: `
                         <div class="text-left text-sm text-gray-600 mt-2 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                            <b>1.</b> กดปุ่มแชร์ <svg class="w-5 h-5 inline text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> ตรงแถบเครื่องมือด้านล่างของ Safari<br><br>
-                            <b>2.</b> เลื่อนลงมาแล้วกดเลือกเมนู <br><b class="text-purple-700">"เพิ่มไปยังหน้าจอโฮม"</b> <br><span class="text-xs text-gray-400">(Add to Home Screen)</span>
+                            <b>1.</b> กดปุ่มแชร์ <svg class="w-5 h-5 inline text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg> ตรงแถบเครื่องมือด้านล่าง<br><br>
+                            <b>2.</b> เลือกเมนู <b class="text-purple-700">"เพิ่มไปยังหน้าจอโฮม"</b>
                         </div>
                     `,
                     icon: 'info',
                     confirmButtonColor: '#6b21a8'
                 });
-            } else if (deferredPrompt) {
-                // สำหรับ Android (เด้งหน้าต่างถามติดตั้งเลย)
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    banner.remove(); // ถ้าติดตั้งเสร็จให้ซ่อนแบนเนอร์
-                }
-                deferredPrompt = null;
             } else {
-                // กรณีเข้าผ่านเบราว์เซอร์ที่ไม่รองรับ (เช่น เปิดจากเบราว์เซอร์ในไลน์)
-                Swal.fire('คำแนะนำ', 'กรุณากดที่เมนูจุด 3 จุดมุมขวาบน แล้วเลือก "เปิดในเบราว์เซอร์ (Open in Browser)" ก่อนติดตั้งครับ', 'warning');
+                Swal.fire('คำแนะนำ', 'เบราว์เซอร์นี้ไม่รองรับการติดตั้งอัตโนมัติ กรุณากดเมนูจุด 3 จุด แล้วเลือก "เปิดในเบราว์เซอร์หลัก (Open in Browser)" ก่อนครับ', 'warning');
             }
+        });
+
+        // ถ้าเครื่องมีปัญหา ติดตั้งไม่ได้จริงๆ ให้กดปุ่มนี้เพื่อปิดหน้าต่างบังคับ
+        document.getElementById('skipInstallBtn').addEventListener('click', () => {
+            overlay.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+            setTimeout(() => overlay.remove(), 500);
         });
     });
     </script>
