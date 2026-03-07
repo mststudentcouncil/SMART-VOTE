@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Login - e-Voting</title>
+    <title>MST - e-Voting</title>
     <link rel="icon" type="image/png" href="https://i.postimg.cc/yxjxZmRN/Logo_mstsc_(1)_(1).png">
     <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -38,12 +38,14 @@
 
     document.addEventListener("DOMContentLoaded", () => {
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        const isMac = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-        const isAppleDevice = isIOS || isMac;
         
-        // ถ้าเปิดผ่านแอปแล้ว ให้หยุดการทำงานโค้ดนี้ (ปล่อยให้เห็นหน้า Login ปกติ)
-        if (isStandalone) return; 
+        // เซนเซอร์แยกแยะประเภทอุปกรณ์
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isIPadPro = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1; // ดักจับ iPad รุ่นใหม่
+        const isMobileDevice = isMobile || isIPadPro;
+
+        // ✅ เงื่อนไขใหม่: ถ้าเปิดผ่านแอปแล้ว หรือ "เป็นคอมพิวเตอร์" ให้หยุดการทำงานโค้ดนี้ (ปล่อยให้เห็นหน้า Login ปกติ)
+        if (isStandalone || !isMobileDevice) return;
 
         // สร้างหน้าต่างบังคับเต็มจอ (Overlay) - อัปเดตรูป e-voting.jpg
         const overlay = document.createElement('div');
